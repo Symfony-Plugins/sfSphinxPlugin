@@ -1410,7 +1410,7 @@ class sfSphinxClient
           // handle 64bit ints
           if ($type == self::SPH_ATTR_BIGINT)
           {
-            $attrvals[$attr] = sphUnpackI64(substr($response, $p, 8));
+            $attrvals[$attr] = $this->sphUnpackI64(substr($response, $p, 8));
             $p += 8;
             continue;
           }
