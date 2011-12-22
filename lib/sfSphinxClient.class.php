@@ -1,9 +1,9 @@
 <?php
 /**
  * This file is derived from PHP API of the sfSphinx package.
- * (c) 2001-2010 Andrew Aksyonoff
- * (c) 2007      Rick Olson <rick@napalmriot.com>
- * (c) 2008-2010 Massimiliano Arione <garakkio@gmail.com>
+ * (c) 2001-2011 Andrew Aksyonoff
+ * (c) 2008-2011 Sphinx Technologies Inc
+ * (c) 2008-2011 Massimiliano Arione <garakkio@gmail.com>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -16,6 +16,7 @@
  *
  * @package    sfSphinxPlugin
  * @author     Massimiliano Arione <garakkio@gmail.com>
+ * @version    SVN: $Id$
  */
 class sfSphinxClient
 {
@@ -31,8 +32,8 @@ class sfSphinxClient
   const SEARCHD_COMMAND_FLUSHATTRS = 7;
 
   // current client-side command implementation versions
-  const VER_COMMAND_SEARCH     = 0x117;
-  const VER_COMMAND_EXCERPT    = 0x102;
+  const VER_COMMAND_SEARCH     = 0x119;
+  const VER_COMMAND_EXCERPT    = 0x104;
   const VER_COMMAND_UPDATE     = 0x102;
   const VER_COMMAND_KEYWORDS   = 0x100;
   const VER_COMMAND_STATUS     = 0x100;
@@ -64,7 +65,8 @@ class sfSphinxClient
   const SPH_RANK_MATCHANY       = 5;
   const SPH_RANK_FIELDMASK      = 6;
   const SPH_RANK_SPH04          = 7;
-  const SPH_RANK_TOTAL          = 8;
+  const SPH_RANK_EXPR           = 8;
+  const SPH_RANK_TOTAL          = 9;
 
   // known sort modes
   const SPH_SORT_RELEVANCE     = 0;
@@ -87,7 +89,8 @@ class sfSphinxClient
   const SPH_ATTR_FLOAT     = 5;
   const SPH_ATTR_BIGINT    = 6;
   const SPH_ATTR_STRING    = 7;
-  const SPH_ATTR_MULTI     = 0x40000000;
+  const SPH_ATTR_MULTI     = 0x40000001;
+  const SPH_ATTR_MULTI64   = 0x40000002;
 
   // known grouping functions
   const SPH_GROUPBY_DAY      = 0;
@@ -155,7 +158,7 @@ class sfSphinxClient
       'sort'          => self::SPH_SORT_RELEVANCE,
       'sortby'        => '',
       'min_id'        => 0,
-      'max_id'        => 0xFFFFFFFF,
+      'max_id'        => 0,
       'filters'       => array(),
       'groupby'       => '',
       'groupfunc'     => self::SPH_GROUPBY_DAY,
@@ -545,6 +548,29 @@ class sfSphinxClient
     $to   = array('\\\\', '\(','\)','\|','\-','\!','\@','\~','\"', '\&', '\/', '\^', '\$', '\=');
 
     return str_replace($from, $to, $string);
+  }
+
+  /**
+   * @param  integer
+   * @return integer
+   */
+  private function sphFixUint($value)
+  {
+	  if (PHP_INT_SIZE >= 8)
+	  {
+		  // x64 route, workaround broken unpack() in 5.2.2+
+		  if ($value < 0)
+		  {
+		    $value += (1 << 32);
+		  }
+
+		  return $value;
+	  }
+	  else
+	  {
+		  // x32 route, workaround php signed/unsigned braindamage
+		  return sprintf('%u', $value);
+	  }
   }
 
   /**
@@ -1376,20 +1402,7 @@ class sfSphinxClient
         {
           list($doc, $weight) = array_values(unpack('N*N*', substr($response, $p, 8)));
           $p += 8;
-
-          if (PHP_INT_SIZE >= 8)
-          {
-            // x64 route, workaround broken unpack() in 5.2.2+
-            if ($doc < 0)
-            {
-              $doc += (1 << 32);
-            }
-          }
-          else
-          {
-            // x32 route, workaround php signed/unsigned braindamage
-            $doc = sprintf('%u', $doc);
-          }
+          $doc = $this->sphFixUint($doc);
         }
         $weight = sprintf('%u', $weight);
 
@@ -1436,7 +1449,7 @@ class sfSphinxClient
             {
               list(, $val) = unpack('N*', substr($response, $p, 4));
               $p += 4;
-              $attrvals[$attr][] = sprintf('%u', $val);
+              $attrvals[$attr][] = $this->sphFixUint($val);
             }
           }
           elseif ($type == self::SPH_ATTR_STRING)
@@ -1446,7 +1459,7 @@ class sfSphinxClient
           }
           else
           {
-            $attrvals[$attr] = sprintf('%u', $val);
+            $attrvals[$attr] = $this->sphFixUint($val);
           }
         }
 
