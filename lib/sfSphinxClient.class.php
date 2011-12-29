@@ -112,9 +112,6 @@ class sfSphinxClient
     $min_id,        // min ID to match (default is 0)
     $max_id,        // max ID to match (default is UINT_MAX)
     $filters,       // search filters
-    $min,           // attribute name to min-value hash (for range filters)
-    $max,           // attribute name to max-value hash (for range filters)
-    $filter,        // attribute name to values set hash (for values-set filters)
     $groupby,       // group-by attribute name (default is self::SPH_GROUPBY_DAY)
     $groupfunc,     // function to pre-process group-by attribute value with
     $groupsort,     // group-by sorting clause (to sort groups in result set with)
@@ -126,6 +123,7 @@ class sfSphinxClient
     $anchor,        // geographical anchor point
     $indexweights,  // per-index weights
     $ranker,        // ranking mode (default is self::SPH_RANK_PROXIMITY_BM25)
+    $rankexpr,      // ranking mode expression (for SPH_RANK_EXPR)
     $maxquerytime,  // max query time, milliseconds (default is 0, do not limit)
     $fieldweights,  // per-field-name weights
     $overrides,     // per-query attribute values overrides
@@ -171,13 +169,17 @@ class sfSphinxClient
       'anchor'        => array(),
       'indexweights'  => array(),
       'ranker'        => self::SPH_RANK_PROXIMITY_BM25,
+      'rankerexpr'    => '',
       'maxquerytime'  => 0,
       'fieldweights'  => array(),
       'overrides'     => array(),
       'select'        => '*',
       'mbenc'         => '',
-      'arrayresult'   => true,
+      'arrayresult'   => false,
       'timeout'       => 0,
+      'reqs'          => array(),
+      'conerror'      => false,
+      'warning'       => '',
     );
     $available_options = array_keys($default_options);
     $new_options = array_merge($default_options, $options);
@@ -556,21 +558,21 @@ class sfSphinxClient
    */
   private function sphFixUint($value)
   {
-	  if (PHP_INT_SIZE >= 8)
-	  {
-		  // x64 route, workaround broken unpack() in 5.2.2+
-		  if ($value < 0)
-		  {
-		    $value += (1 << 32);
-		  }
+    if (PHP_INT_SIZE >= 8)
+    {
+      // x64 route, workaround broken unpack() in 5.2.2+
+      if ($value < 0)
+      {
+        $value += (1 << 32);
+      }
 
-		  return $value;
-	  }
-	  else
-	  {
-		  // x32 route, workaround php signed/unsigned braindamage
-		  return sprintf('%u', $value);
-	  }
+      return $value;
+    }
+    else
+    {
+      // x32 route, workaround php signed/unsigned braindamage
+      return sprintf('%u', $value);
+    }
   }
 
   /**
@@ -1106,7 +1108,12 @@ class sfSphinxClient
 
     // build request
     // mode and limits
-    $req = pack('NNNNN', $this->offset, $this->limit, $this->mode, $this->ranker, $this->sort);
+    $req = pack('NNNNN', $this->offset, $this->limit, $this->mode, $this->ranker);
+    if ($this->ranker == self::SPH_RANK_EXPR)
+    {
+      $req .= pack('N', strlen($this->rankexpr)) . $this->_rankexpr;
+    }
+    $req .= pack('N', $this->sort); // (deprecated) sort mode
     $req .= pack('N', strlen($this->sortby)) . $this->sortby;
     $req .= pack('N', strlen($query)) . $query; // query itself
     $req .= pack('N', count($this->weights)); // weights
@@ -1291,9 +1298,9 @@ class sfSphinxClient
 
     $nreqs = count($this->reqs);
     $req = join('', $this->reqs);
-    $len = 4 + strlen($req);
+    $len = 8 + strlen($req);
     // add header
-    $req = pack('nnNN', self::SEARCHD_COMMAND_SEARCH, self::VER_COMMAND_SEARCH, $len, $nreqs) . $req;
+    $req = pack('nnNN', self::SEARCHD_COMMAND_SEARCH, self::VER_COMMAND_SEARCH, $len, 0, $nreqs) . $req;
 
     if (!($this->Send($fp, $req, $len + 8)) || !($response = $this->GetResponse($fp, self::VER_COMMAND_SEARCH)))
     {
@@ -1441,7 +1448,7 @@ class sfSphinxClient
           // handle everything else as unsigned ints
           list(, $val) = unpack('N*', substr($response, $p, 4));
           $p += 4;
-          if ($type & self::SPH_ATTR_MULTI)
+          if ($type == self::SPH_ATTR_MULTI)
           {
             $attrvals[$attr] = array();
             $nvalues = $val;
@@ -1450,6 +1457,17 @@ class sfSphinxClient
               list(, $val) = unpack('N*', substr($response, $p, 4));
               $p += 4;
               $attrvals[$attr][] = $this->sphFixUint($val);
+            }
+          }
+          elseif ($type == self::SPH_ATTR_MULTI64)
+          {
+            $attrvals[$attr] = array();
+            $nvalues = $val;
+            while ($nvalues > 0 && $p < $max)
+            {
+              $attrvals[$attr][] = $this->sphUnpackU64(substr($response, $p, 8));
+              $p += 8;
+              $nvalues -= 2;
             }
           }
           elseif ($type == self::SPH_ATTR_STRING)

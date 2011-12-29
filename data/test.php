@@ -72,7 +72,7 @@ if (is_array($res['matches']))
       }
       else
       {
-        if ($attrtype == sfSphinxClient::SPH_ATTR_TIMESTAMP)
+        if ($attrtype == sfSphinxClient::SPH_ATTR_TIMESTAMP || $attrtype == sfSphinxClient::SPH_ATTR_MULTI64)
         {
           $value = date('Y-m-d H:i:s', $value);
         }
