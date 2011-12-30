@@ -66,7 +66,7 @@ if (is_array($res['matches']))
     foreach ($res['attrs'] as $attrname => $attrtype)
     {
       $value = $docinfo['attrs'][$attrname];
-      if ($attrtype & sfSphinxClient::SPH_ATTR_MULTI)
+      if ($attrtype == sfSphinxClient::SPH_ATTR_MULTI || $attrtype == sfSphinxClient::SPH_ATTR_MULTI64)
       {
         $value = '(' . implode(',', $value) . ')';
       }

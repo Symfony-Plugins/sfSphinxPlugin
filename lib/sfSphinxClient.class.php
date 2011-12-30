@@ -1108,7 +1108,7 @@ class sfSphinxClient
 
     // build request
     // mode and limits
-    $req = pack('NNNNN', $this->offset, $this->limit, $this->mode, $this->ranker);
+    $req = pack('NNNN', $this->offset, $this->limit, $this->mode, $this->ranker);
     if ($this->ranker == self::SPH_RANK_EXPR)
     {
       $req .= pack('N', strlen($this->rankexpr)) . $this->_rankexpr;
@@ -1300,7 +1300,7 @@ class sfSphinxClient
     $req = join('', $this->reqs);
     $len = 8 + strlen($req);
     // add header
-    $req = pack('nnNN', self::SEARCHD_COMMAND_SEARCH, self::VER_COMMAND_SEARCH, $len, 0, $nreqs) . $req;
+    $req = pack('nnNNN', self::SEARCHD_COMMAND_SEARCH, self::VER_COMMAND_SEARCH, $len, 0, $nreqs) . $req;
 
     if (!($this->Send($fp, $req, $len + 8)) || !($response = $this->GetResponse($fp, self::VER_COMMAND_SEARCH)))
     {
