@@ -3,13 +3,13 @@
  * test script for sfSphinxClient.class.php
  * Usage: php test.php <query> [index]
  * Query parameter is mandatory. Enclose in quotes if query contains more words.
- * E.g.; php test.php "foo bar"
+ * E.g.: php test.php "foo bar"
  * Index parameter is optional. If not passed, query is executed on all index.
  * Example: php test.php "foo bar" myIndex
  */
 
 // check for params
-if ($_SERVER['argc'] < 1)
+if ($_SERVER['argc'] < 2)
 {
   exit('usage: php ' . $_SERVER['argv'][0] . ' <query> [index]' . PHP_EOL);
 }
@@ -19,7 +19,8 @@ require_once dirname(__FILE__) . '/../lib/sfSphinxClient.class.php';
 
 // options
 $options = array(
-  'weights' => array(100, 1),
+  'weights'     => array(100, 1),
+  'arrayresult' => true,
 );
 
 // query
@@ -28,8 +29,16 @@ $q = $_SERVER['argv'][1];
 $index = empty($_SERVER['argv'][2]) ? '*' : $_SERVER['argv'][2];
 
 // do query
-$sphinx = new sfSphinxClient($options);
-$res = $sphinx->Query($q);
+try
+{
+  $sphinx = new sfSphinxClient($options);
+  $res = $sphinx->Query($q);
+}
+catch (Exception $e)
+{
+  exit('Exception: ' . $e->getMessage() . PHP_EOL);
+}
+  
 
 // query failed
 if ($res === false)
@@ -83,5 +92,3 @@ if (is_array($res['matches']))
     $n ++;
   }
 }
-
-?>
